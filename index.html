@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Invoice Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --ink:#12233d;
+    --ink-soft:#2c3e5c;
+    --paper:#f5f2ea;
+    --paper-line:#d8d2c2;
+    --brass:#b5842a;
+    --brass-deep:#8f6620;
+    --ok:#2f6b4f;
+    --err:#a83b32;
+    --mono: "IBM Plex Mono", "SF Mono", "Consolas", monospace;
+    --serif: "Iowan Old Style", "Georgia", serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--ink);
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:28px 20px 60px;}
+
+  header.top{
+    display:flex;align-items:baseline;justify-content:space-between;
+    color:var(--paper);
+    padding:6px 4px 22px;
+    border-bottom:1px solid rgba(245,242,234,0.18);
+    margin-bottom:26px;
+  }
+  header.top .brand{font-family:var(--serif);font-size:22px;letter-spacing:.3px;}
+  header.top .brand small{
+    display:block;font-family: -apple-system, sans-serif; font-size:11px;
+    letter-spacing:2px;color:var(--brass);font-weight:600;margin-top:2px;
+  }
+  header.top .stamp{
+    width:64px;height:64px;border-radius:50%;
+    border:2px solid var(--brass);color:var(--brass);
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:10px;text-align:center;line-height:1.2;
+    transform:rotate(-8deg);opacity:.85;
+  }
+  .langsw{display:flex;gap:6px;}
+  .langsw button{
+    font-family: -apple-system, sans-serif;
+    font-size:12px;padding:6px 12px;border-radius:14px;
+    border:1px solid rgba(245,242,234,0.3);background:none;color:rgba(245,242,234,0.75);
+    cursor:pointer;transition:all .15s;
+  }
+  .langsw button:hover{border-color:var(--brass);color:var(--paper);}
+  .langsw button.active{background:var(--brass);border-color:var(--brass);color:#231a08;font-weight:600;}
+
+  .card{
+    background:var(--paper);
+    border-radius:3px;
+    box-shadow:0 18px 40px rgba(0,0,0,.28);
+    margin-bottom:20px;
+    overflow:hidden;
+  }
+  .card .head{
+    display:flex;align-items:center;gap:10px;
+    padding:16px 22px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  .card .head .num{
+    font-family:var(--mono);font-size:13px;color:var(--paper);
+    background:var(--ink-soft);width:26px;height:26px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .card .head h2{font-size:15px;margin:0;letter-spacing:.2px;color:var(--ink);}
+  .card .head p{margin:2px 0 0;font-size:12px;color:#6a6455;}
+  .card .body{padding:20px 22px 22px;}
+
+  .dropzone{
+    border:1.5px dashed var(--paper-line);
+    border-radius:3px;
+    padding:20px;
+    text-align:center;
+    background:#fbf9f3;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+    font-size:13px;
+    color:#6a6455;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--brass);background:#fff8ea;}
+  .dropzone input{display:none;}
+  .dropzone .fname{font-family:var(--mono);color:var(--ink);font-size:12.5px;margin-top:6px;word-break:break-all;}
+  .dropzone.filled{border-style:solid;border-color:var(--ok);}
+
+  .filelist{margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--ink-soft);}
+  .filelist div{padding:3px 0;border-bottom:1px dotted var(--paper-line);display:flex;justify-content:space-between;}
+  .filelist button{border:none;background:none;color:var(--err);cursor:pointer;font-size:12px;}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .field{display:flex;flex-direction:column;gap:5px;}
+  .field.full{grid-column:1/-1;}
+  .field label{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#8b7f66;}
+  .field input, .field textarea{
+    font-family: -apple-system, sans-serif;
+    font-size:13.5px;
+    padding:8px 10px;
+    border:1px solid var(--paper-line);
+    border-radius:2px;
+    background:#fff;
+    color:var(--ink);
+  }
+  .field input:focus, .field textarea:focus{outline:2px solid var(--brass);outline-offset:0;}
+
+  .btnrow{display:flex;gap:12px;align-items:center;margin-top:6px;flex-wrap:wrap;}
+  button.primary{
+    font-family: -apple-system, sans-serif;
+    font-weight:600;font-size:13.5px;letter-spacing:.3px;
+    background:var(--brass);color:#231a08;border:none;
+    padding:11px 22px;border-radius:2px;cursor:pointer;
+    transition:background .15s, transform .1s;
+  }
+  button.primary:hover{background:var(--brass-deep);}
+  button.primary:disabled{background:#c9c3b3;color:#8b8672;cursor:not-allowed;}
+  button.ghost{
+    background:none;border:1px solid var(--paper-line);color:var(--ink-soft);
+    padding:10px 18px;border-radius:2px;cursor:pointer;font-size:13px;
+  }
+  button.ghost:hover{border-color:var(--ink-soft);}
+
+  .log{
+    font-family:var(--mono);font-size:12px;line-height:1.7;
+    color:var(--ink-soft);
+    margin-top:14px;padding-top:14px;border-top:1px dotted var(--paper-line);
+    min-height:0;
+  }
+  .log .line{display:flex;gap:8px;}
+  .log .tag{color:var(--brass-deep);flex-shrink:0;}
+  .log .err{color:var(--err);}
+  .log .ok{color:var(--ok);}
+
+  table.results{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px;}
+  table.results th{
+    text-align:left;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;
+    color:#8b7f66;border-bottom:1px solid var(--ink);padding:6px 8px;
+  }
+  table.results td{padding:7px 8px;border-bottom:1px solid var(--paper-line);font-family:var(--mono);}
+  table.results tr.mismatch td{color:var(--err);}
+  table.results td.num{text-align:right;}
+  .badge{
+    display:inline-block;font-family: -apple-system, sans-serif;font-size:10px;font-weight:700;
+    padding:2px 7px;border-radius:10px;letter-spacing:.3px;
+  }
+  .badge.ok{background:#e2efe6;color:var(--ok);}
+  .badge.bad{background:#f6e3e0;color:var(--err);}
+  .totalrow td{font-weight:700;border-top:2px solid var(--ink);border-bottom:none;}
+
+  footer.note{color:rgba(245,242,234,0.55);font-size:11.5px;text-align:center;margin-top:8px;line-height:1.6;}
+  footer.note a{color:var(--brass);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">Invoice Builder<small data-i18n="tagline">PACKING LIST + PO &rarr; COMMERCIAL INVOICE</small></div>
+    <div class="langsw" id="langsw">
+      <button data-lang="ko" class="active">한국어</button>
+      <button data-lang="en">English</button>
+      <button data-lang="vi">Tiếng Việt</button>
+    </div>
+  </header>
+
+  <!-- STEP 1 -->
+  <div class="card">
+    <div class="head"><div class="num">1</div><div><h2 data-i18n="s1.title">Packing List 업로드</h2><p data-i18n="s1.desc">.xlsx &mdash; PO No / Style No / Pos / Color Info / Yds/Pcs 열이 필요합니다</p></div></div>
+    <div class="body">
+      <div class="dropzone" id="dz-pl">
+        <div data-i18n="s1.drop">클릭해서 Packing List 파일 선택</div>
+        <div class="fname" id="dz-pl-name"></div>
+        <input type="file" id="in-pl" accept=".xlsx">
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="card">
+    <div class="head"><div class="num">2</div><div><h2 data-i18n="s2.title">발주서(PO) PDF 업로드</h2><p data-i18n="s2.desc">여러 개 선택 가능 &mdash; 브라우저에서 바로 PO No / Style No / Part / Color / Price를 읽어옵니다</p></div></div>
+    <div class="body">
+      <div class="dropzone" id="dz-po">
+        <div data-i18n="s2.drop">클릭해서 PO PDF 파일 선택 (여러 개 가능)</div>
+        <input type="file" id="in-po" accept=".pdf" multiple>
+      </div>
+      <div class="filelist" id="po-list"></div>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="card">
+    <div class="head"><div class="num">3</div><div><h2 data-i18n="s3.title">인보이스 상단 정보</h2><p data-i18n="s3.desc">PO에서 추출한 값으로 자동 채워지며, 직접 수정할 수 있습니다</p></div></div>
+    <div class="body">
+      <div class="grid">
+        <div class="field"><label data-i18n="f.shipper">Shipper / Exporter</label><input id="f-shipper" value="DONGWON &amp; PEOPLE VINA CO.,LTD"></div>
+        <div class="field"><label data-i18n="f.shipperAddr">Shipper 주소</label><input id="f-shipper-addr" value="NGUYEN AI QUOC STREET, NHON TRACH 3 INDUSTRIAL PARK-PHASE 2, HIEP PHUOC TOWN, NHON TRACH DISTRICT, DONG NAI PROVINCE, VIETNAM"></div>
+        <div class="field"><label data-i18n="f.invno">Invoice No.</label><input id="f-invno" data-i18n-ph="ph.invno" placeholder="예: 46160"></div>
+        <div class="field"><label data-i18n="f.invdate">Invoice Date</label><input id="f-invdate" type="date"></div>
+        <div class="field"><label data-i18n="f.lcno">L/C No.</label><input id="f-lcno" data-i18n-ph="ph.optional" placeholder="선택 입력"></div>
+        <div class="field"><label data-i18n="f.payby">Payment By</label><input id="f-payby" value="SAE-A TRADING CO.,LTD"></div>
+        <div class="field"><label data-i18n="f.consignee">Consignee</label><input id="f-consignee" data-i18n-ph="ph.autofill" placeholder="PO에서 자동 채움"></div>
+        <div class="field"><label data-i18n="f.consigneeTel">Consignee Tel</label><input id="f-consignee-tel" data-i18n-ph="ph.autofill" placeholder="PO에서 자동 채움"></div>
+        <div class="field full"><label data-i18n="f.consigneeAddr">Consignee 주소</label><input id="f-consignee-addr" data-i18n-ph="ph.autofill" placeholder="PO에서 자동 채움"></div>
+        <div class="field"><label data-i18n="f.port">Port of Loading</label><input id="f-port" value="HO CHI MINH"></div>
+        <div class="field"><label data-i18n="f.dest">Final Destination</label><input id="f-dest" data-i18n-ph="ph.destAuto" placeholder="PO의 Ship To 기준으로 자동 채워짐"></div>
+        <div class="field"><label data-i18n="f.vessel">Vessel / Mode</label><input id="f-vessel" data-i18n-ph="ph.vessel" placeholder="예: BY TRUCK"></div>
+        <div class="field"><label data-i18n="f.priceterm">Price Term</label><input id="f-priceterm" data-i18n-ph="ph.priceterm" placeholder="예: CPT HOCHIMINH, VIET NAM"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="card">
+    <div class="head"><div class="num">4</div><div><h2 data-i18n="s4.title">대사 &amp; 생성</h2><p data-i18n="s4.desc">수량은 Packing List, 가격은 PO 기준으로 반영됩니다</p></div></div>
+    <div class="body">
+      <div class="btnrow">
+        <button class="primary" id="btn-run" data-i18n="btn.run">대사 실행</button>
+        <button class="ghost" id="btn-download" disabled data-i18n="btn.download">인보이스 다운로드 (.xlsx)</button>
+      </div>
+      <div class="log" id="log"></div>
+      <div id="results"></div>
+    </div>
+  </div>
+
+  <footer class="note" data-i18n="footer.note">
+    이 도구는 로그인이나 서버 없이 브라우저 안에서만 동작합니다(Sae-A Trading PO 양식 기준). 회사/양식이 다른 PO는 표 구조가 달라 결과가 달라질 수 있으니, 다운로드 후 가격·수량을 다시 한번 확인해 주세요.
+  </footer>
+</div>
+
+<script>
+const I18N = {
+  ko: {
+    tagline: "PACKING LIST + PO &rarr; COMMERCIAL INVOICE",
+    "s1.title": "Packing List 업로드",
+    "s1.desc": ".xlsx &mdash; PO No / Style No / Pos / Color Info / Yds/Pcs 열이 필요합니다",
+    "s1.drop": "클릭해서 Packing List 파일 선택",
+    "s2.title": "발주서(PO) PDF 업로드",
+    "s2.desc": "여러 개 선택 가능 &mdash; 브라우저에서 바로 PO No / Style No / Part / Color / Price를 읽어옵니다",
+    "s2.drop": "클릭해서 PO PDF 파일 선택 (여러 개 가능)",
+    "s3.title": "인보이스 상단 정보",
+    "s3.desc": "PO에서 추출한 값으로 자동 채워지며, 직접 수정할 수 있습니다",
+    "s4.title": "대사 &amp; 생성",
+    "s4.desc": "수량은 Packing List, 가격은 PO 기준으로 반영됩니다",
+    "f.shipper": "Shipper / Exporter",
+    "f.shipperAddr": "Shipper 주소",
+    "f.invno": "Invoice No.",
+    "f.invdate": "Invoice Date",
+    "f.lcno": "L/C No.",
+    "f.payby": "Payment By",
+    "f.consignee": "Consignee",
+    "f.consigneeTel": "Consignee Tel",
+    "f.consigneeAddr": "Consignee 주소",
+    "f.port": "Port of Loading",
+    "f.dest": "Final Destination",
+    "f.vessel": "Vessel / Mode",
+    "f.priceterm": "Price Term",
+    "ph.invno": "예: 46160",
+    "ph.optional": "선택 입력",
+    "ph.autofill": "PO에서 자동 채움",
+    "ph.destAuto": "PO의 Ship To 기준으로 자동 채워짐",
+    "ph.vessel": "예: BY TRUCK",
+    "ph.priceterm": "예: CPT HOCHIMINH, VIET NAM",
+    "btn.run": "대사 실행",
+    "btn.download": "인보이스 다운로드 (.xlsx)",
+    "btn.delete": "삭제",
+    "footer.note": "이 도구는 로그인이나 서버 없이 브라우저 안에서만 동작합니다(Sae-A Trading PO 양식 기준). 회사/양식이 다른 PO는 표 구조가 달라 결과가 달라질 수 있으니, 다운로드 후 가격·수량을 다시 한번 확인해 주세요.",
+    "log.needPl": "Packing list 파일을 먼저 선택하세요.",
+    "log.needPo": "PO PDF 파일을 최소 1개 선택하세요.",
+    "log.readingPl": "Packing list 읽는 중...",
+    "log.plDone": "Packing list {0}개 품목(PO/Part/Color 기준) 확인",
+    "log.readingPo": "PO 판독 중: {0} ...",
+    "log.poDone": "&rarr; PO No {0} / Style {1} / 품목 {2}건 추출",
+    "log.mismatch": "{0}건은 PO에서 동일한 Part+Color 가격을 찾지 못했습니다. 아래 표에서 확인하세요.",
+    "log.allMatched": "모든 품목이 PO 가격과 매칭되었습니다.",
+    "log.error": "오류: {0}",
+    "err.missingCol": 'Packing list에 "{0}" 열을 찾을 수 없습니다.',
+    "err.badJson": "이 PDF에서 PO No / Order Details 표를 인식하지 못했습니다. 다른 양식의 PO PDF일 수 있습니다.",
+    "res.poNo": "PO No", "res.styleNo": "Style No", "res.part": "Part",
+    "res.fabric": "Fabric Info", "res.color": "Color", "res.qty": "Qty(Yds)",
+    "res.price": "Price", "res.amount": "Amount", "res.status": "상태",
+    "res.matched": "MATCHED", "res.nopricebadge": "가격 없음",
+    "res.total": "TOTAL"
+  },
+  en: {
+    tagline: "PACKING LIST + PO &rarr; COMMERCIAL INVOICE",
+    "s1.title": "Upload Packing List",
+    "s1.desc": ".xlsx &mdash; requires PO No / Style No / Pos / Color Info / Yds/Pcs columns",
+    "s1.drop": "Click to choose the Packing List file",
+    "s2.title": "Upload PO PDF(s)",
+    "s2.desc": "Multiple files allowed &mdash; PO No / Style No / Part / Color / Price are read right in your browser",
+    "s2.drop": "Click to choose PO PDF file(s) (multiple allowed)",
+    "s3.title": "Invoice header details",
+    "s3.desc": "Auto-filled from the PO data, and fully editable",
+    "s4.title": "Reconcile &amp; generate",
+    "s4.desc": "Quantity comes from the Packing List, price comes from the PO",
+    "f.shipper": "Shipper / Exporter",
+    "f.shipperAddr": "Shipper address",
+    "f.invno": "Invoice No.",
+    "f.invdate": "Invoice date",
+    "f.lcno": "L/C No.",
+    "f.payby": "Payment by",
+    "f.consignee": "Consignee",
+    "f.consigneeTel": "Consignee tel",
+    "f.consigneeAddr": "Consignee address",
+    "f.port": "Port of loading",
+    "f.dest": "Final destination",
+    "f.vessel": "Vessel / mode",
+    "f.priceterm": "Price term",
+    "ph.invno": "e.g. 46160",
+    "ph.optional": "optional",
+    "ph.autofill": "auto-filled from PO",
+    "ph.destAuto": "auto-filled from PO's Ship To",
+    "ph.vessel": "e.g. BY TRUCK",
+    "ph.priceterm": "e.g. CPT HOCHIMINH, VIET NAM",
+    "btn.run": "Run reconciliation",
+    "btn.download": "Download invoice (.xlsx)",
+    "btn.delete": "Remove",
+    "footer.note": "This tool runs entirely in your browser &mdash; no sign-in and no server required (tuned to the Sae-A Trading PO layout). Suppliers with a different PO layout may extract differently &mdash; please double-check price and quantity after downloading.",
+    "log.needPl": "Please choose a Packing List file first.",
+    "log.needPo": "Please choose at least one PO PDF.",
+    "log.readingPl": "Reading Packing List...",
+    "log.plDone": "Found {0} line items (by PO/Part/Color) in the Packing List",
+    "log.readingPo": "Reading PO: {0} ...",
+    "log.poDone": "&rarr; PO No {0} / Style {1} / {2} item(s) extracted",
+    "log.mismatch": "{0} item(s) had no matching Part+Color price in the PO. See the table below.",
+    "log.allMatched": "All items matched a PO price.",
+    "log.error": "Error: {0}",
+    "err.missingCol": 'Could not find the "{0}" column in the Packing List.',
+    "err.badJson": "Could not recognize the PO No / Order Details table in this PDF — it may use a different layout.",
+    "res.poNo": "PO No", "res.styleNo": "Style No", "res.part": "Part",
+    "res.fabric": "Fabric Info", "res.color": "Color", "res.qty": "Qty(Yds)",
+    "res.price": "Price", "res.amount": "Amount", "res.status": "Status",
+    "res.matched": "MATCHED", "res.nopricebadge": "NO PRICE",
+    "res.total": "TOTAL"
+  },
+  vi: {
+    tagline: "PACKING LIST + PO &rarr; COMMERCIAL INVOICE",
+    "s1.title": "Tải lên Packing List",
+    "s1.desc": ".xlsx &mdash; cần có cột PO No / Style No / Pos / Color Info / Yds/Pcs",
+    "s1.drop": "Nhấn để chọn file Packing List",
+    "s2.title": "Tải lên PDF đơn hàng (PO)",
+    "s2.desc": "Có thể chọn nhiều file &mdash; PO No / Style No / Part / Color / Price được đọc ngay trong trình duyệt",
+    "s2.drop": "Nhấn để chọn file PDF của PO (có thể chọn nhiều file)",
+    "s3.title": "Thông tin đầu hoá đơn",
+    "s3.desc": "Được tự động điền từ PO, và có thể chỉnh sửa trực tiếp",
+    "s4.title": "Đối chiếu &amp; tạo hoá đơn",
+    "s4.desc": "Số lượng lấy từ Packing List, giá lấy từ PO",
+    "f.shipper": "Shipper / Exporter",
+    "f.shipperAddr": "Địa chỉ Shipper",
+    "f.invno": "Số hoá đơn (Invoice No.)",
+    "f.invdate": "Ngày hoá đơn",
+    "f.lcno": "Số L/C",
+    "f.payby": "Payment by",
+    "f.consignee": "Consignee (Người nhận)",
+    "f.consigneeTel": "Điện thoại Consignee",
+    "f.consigneeAddr": "Địa chỉ Consignee",
+    "f.port": "Cảng xếp hàng",
+    "f.dest": "Điểm đến cuối cùng",
+    "f.vessel": "Phương tiện vận chuyển",
+    "f.priceterm": "Điều kiện giá",
+    "ph.invno": "VD: 46160",
+    "ph.optional": "không bắt buộc",
+    "ph.autofill": "tự động điền từ PO",
+    "ph.destAuto": "tự động điền theo Ship To của PO",
+    "ph.vessel": "VD: BY TRUCK",
+    "ph.priceterm": "VD: CPT HOCHIMINH, VIET NAM",
+    "btn.run": "Chạy đối chiếu",
+    "btn.download": "Tải hoá đơn (.xlsx)",
+    "btn.delete": "Xoá",
+    "footer.note": "Công cụ này hoạt động hoàn toàn trong trình duyệt &mdash; không cần đăng nhập, không cần server (được thiết kế theo mẫu PO của Sae-A Trading). Nếu nhà cung cấp dùng mẫu PO khác, kết quả trích xuất có thể khác &mdash; vui lòng kiểm tra lại giá và số lượng sau khi tải xuống.",
+    "log.needPl": "Vui lòng chọn file Packing List trước.",
+    "log.needPo": "Vui lòng chọn ít nhất 1 file PDF của PO.",
+    "log.readingPl": "Đang đọc Packing List...",
+    "log.plDone": "Đã tìm thấy {0} dòng hàng (theo PO/Part/Color) trong Packing List",
+    "log.readingPo": "Đang đọc PO: {0} ...",
+    "log.poDone": "&rarr; PO No {0} / Style {1} / {2} mục được trích xuất",
+    "log.mismatch": "{0} mục không tìm thấy giá khớp Part+Color trong PO. Xem bảng dưới đây.",
+    "log.allMatched": "Tất cả các mục đã khớp với giá trong PO.",
+    "log.error": "Lỗi: {0}",
+    "err.missingCol": 'Không tìm thấy cột "{0}" trong Packing List.',
+    "err.badJson": "Không nhận diện được bảng PO No / Order Details trong file PDF này — có thể PO này dùng mẫu khác.",
+    "res.poNo": "PO No", "res.styleNo": "Style No", "res.part": "Part",
+    "res.fabric": "Fabric Info", "res.color": "Color", "res.qty": "SL (Yds)",
+    "res.price": "Price", "res.amount": "Amount", "res.status": "Trạng thái",
+    "res.matched": "ĐÃ KHỚP", "res.nopricebadge": "THIẾU GIÁ",
+    "res.total": "TỔNG"
+  }
+};
+let currentLang = 'ko';
+function t(key, ...args){
+  let s = (I18N[currentLang] && I18N[currentLang][key]) || key;
+  args.forEach((a,i) => { s = s.replace(`{${i}}`, a); });
+  return s;
+}
+function applyLang(lang){
+  currentLang = lang;
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.getAttribute('data-i18n-ph')); });
+  document.querySelectorAll('#langsw button').forEach(b => b.classList.toggle('active', b.getAttribute('data-lang') === lang));
+  renderPoList();
+  if (state.results) renderResults(state.results);
+}
+document.getElementById('langsw').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-lang]');
+  if (btn) applyLang(btn.getAttribute('data-lang'));
+});
+
+const state = { plRows: null, poData: [], results: null };
+
+// ---------- dropzones ----------
+const dzPl = document.getElementById('dz-pl');
+const inPl = document.getElementById('in-pl');
+dzPl.addEventListener('click', () => inPl.click());
+inPl.addEventListener('change', () => {
+  if (inPl.files[0]) {
+    document.getElementById('dz-pl-name').textContent = inPl.files[0].name;
+    dzPl.classList.add('filled');
+  }
+});
+
+const dzPo = document.getElementById('dz-po');
+const inPo = document.getElementById('in-po');
+let poFiles = [];
+dzPo.addEventListener('click', () => inPo.click());
+inPo.addEventListener('change', () => {
+  poFiles = poFiles.concat(Array.from(inPo.files));
+  renderPoList();
+  inPo.value = '';
+});
+function renderPoList(){
+  const el = document.getElementById('po-list');
+  el.innerHTML = '';
+  poFiles.forEach((f,i)=>{
+    const row = document.createElement('div');
+    row.innerHTML = `<span>${f.name}</span>`;
+    const btn = document.createElement('button');
+    btn.textContent = t('btn.delete');
+    btn.onclick = () => { poFiles.splice(i,1); renderPoList(); };
+    row.appendChild(btn);
+    el.appendChild(row);
+  });
+}
+
+// ---------- logging ----------
+function log(msg, cls){
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = 'line' + (cls ? ' '+cls : '');
+  line.innerHTML = `<span class="tag">&gt;</span><span>${msg}</span>`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog(){ document.getElementById('log').innerHTML = ''; }
+
+// ---------- packing list parsing ----------
+async function parsePackingList(file){
+  const buf = await file.arrayBuffer();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.worksheets[0];
+
+  const headerRow = ws.getRow(1);
+  const colOf = {};
+  headerRow.eachCell((cell, colNumber) => {
+    const key = String(cell.value || '').replace(/\n/g,' ').trim();
+    if (key) colOf[key] = colNumber;
+  });
+  const need = ['Po No','Style No','Pos','Color Info','Yds/Pcs'];
+  for (const n of need){
+    if (!colOf[n]) throw new Error(t('err.missingCol', n));
+  }
+  const hasFabricInfo = !!colOf['Fabric Info'];
+
+  const groups = {};
+  ws.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const poNo = row.getCell(colOf['Po No']).value;
+    if (!poNo) return;
+    const styleNo = row.getCell(colOf['Style No']).value;
+    const pos = row.getCell(colOf['Pos']).value;
+    const color = row.getCell(colOf['Color Info']).value;
+    const fabricInfo = hasFabricInfo ? row.getCell(colOf['Fabric Info']).value : '';
+    let yds = row.getCell(colOf['Yds/Pcs']).value;
+    yds = typeof yds === 'number' ? yds : parseFloat(yds) || 0;
+
+    const key = [poNo, styleNo, pos, color].join('||');
+    if (!groups[key]) groups[key] = { poNo, styleNo, pos, color, fabricInfo, yds: 0 };
+    groups[key].yds += yds;
+  });
+  return Object.values(groups);
+}
+
+// ---------- PO PDF extraction (fully offline via pdf.js, no login required) ----------
+// Tuned for the Sae-A Trading PO template shown to us. If a supplier uses a
+// different PO layout, this table/column detection may need retuning.
+async function getPdfItems(file){
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+  const page = await doc.getPage(1);
+  const content = await page.getTextContent();
+  return content.items.map(it => ({ x: it.transform[4], y: Math.round(it.transform[5]), str: it.str, w: it.width }));
+}
+
+function reconstructLines(items){
+  const rows = {};
+  items.forEach(it => { (rows[it.y] = rows[it.y] || []).push(it); });
+  const ys = Object.keys(rows).map(Number).sort((a,b) => b - a);
+  return ys.map(y => {
+    const sorted = rows[y].slice().sort((a,b) => a.x - b.x);
+    let line = '', prevEnd = null;
+    sorted.forEach(it => {
+      if (prevEnd !== null && (it.x - prevEnd) > 1.0) line += ' ';
+      line += it.str;
+      prevEnd = it.x + it.w;
+    });
+    return line.replace(/\s+/g,' ').trim();
+  }).filter(l => l.length > 0);
+}
+
+function normColor(s){
+  return String(s || '').toUpperCase().replace(/\s+/g,'');
+}
+
+function parsePOFromItems(items, lines){
+  const result = { po_no:null, style_no:null, ship_to_name:null, ship_to_address:null,
+                    ship_to_tel:null, final_destination:null, fabric_by_part:{}, items:[] };
+
+  for (const l of lines){
+    const m1 = l.match(/PO No\.\s+(\S+)/);
+    if (m1) result.po_no = m1[1];
+    const m2 = l.match(/Style No\s+(\S+)/);
+    if (m2) result.style_no = m2[1];
+  }
+
+  const shipLabel = items.find(it => it.str.trim() === 'Ship To');
+  if (shipLabel){
+    const colMin = 330, colMax = 426;
+    const yMax = shipLabel.y + 25, yMin = shipLabel.y - 15;
+    const rowsInCol = items.filter(it => it.x >= colMin && it.x < colMax && it.str.trim() !== '' && it.y <= yMax && it.y > yMin);
+    const byY = {};
+    rowsInCol.forEach(it => { (byY[it.y] = byY[it.y] || []).push(it); });
+    const ys = Object.keys(byY).map(Number).sort((a,b) => b - a);
+    const colLines = ys.map(y => byY[y].sort((a,b) => a.x - b.x).map(i => i.str).join(' ').trim()).filter(Boolean);
+    const telIdx = colLines.findIndex(l => /^TEL\.?$/i.test(l.trim()));
+    if (colLines.length){
+      result.ship_to_name = colLines[0];
+      const addrLines = telIdx >= 0 ? colLines.slice(1, telIdx) : colLines.slice(1);
+      result.ship_to_address = addrLines.join(' ').trim();
+      if (telIdx >= 0 && colLines[telIdx+1]) result.ship_to_tel = colLines[telIdx+1];
+      const provM = result.ship_to_address.match(/,?\s*([A-Za-z\s]+?)\s+Province/i);
+      if (provM) result.final_destination = `${provM[1].trim().toUpperCase()}, VIETNAM`;
+    }
+  }
+
+  ['Body(1)','Trim(1)'].forEach(label => {
+    const labelItem = items.find(it => it.str.trim() === label);
+    if (!labelItem) return;
+    const sameRow = items.filter(it => it.y === labelItem.y && it.x > labelItem.x + 5 && it.x < 280);
+    const text = sameRow.sort((a,b) => a.x - b.x).map(i => i.str).join(' ').replace(/\s+/g,' ').trim();
+    const part = label.startsWith('Body') ? 'B1' : 'T1';
+    if (text) result.fabric_by_part[part] = text;
+  });
+
+  const rowRe = /^(B1|T1)\s+(.+?)\s+([\d,]+\.?\d*)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+([\d,]+\.\d+)\b/;
+  lines.forEach(l => {
+    const m = l.match(rowRe);
+    if (m) result.items.push({ part: m[1], color: m[2].trim(), price: parseFloat(m[4]) });
+  });
+
+  return result;
+}
+
+async function extractPO(file){
+  const items = await getPdfItems(file);
+  const lines = reconstructLines(items);
+  const parsed = parsePOFromItems(items, lines);
+  if (!parsed.po_no || parsed.items.length === 0){
+    throw new Error(t('err.badJson'));
+  }
+  return parsed;
+}
+
+// ---------- matching ----------
+function matchAndCompute(plRows, poDataList){
+  const priceMap = {};
+  const styleMap = {};
+  const fabricByPoPart = {};
+  const shipTo = {};
+  poDataList.forEach(po => {
+    styleMap[po.po_no] = po.style_no;
+    if (po.ship_to_name) shipTo[po.po_no] = po;
+    if (po.fabric_by_part){
+      Object.keys(po.fabric_by_part).forEach(part => {
+        fabricByPoPart[[po.po_no, part.trim().toUpperCase()].join('||')] = po.fabric_by_part[part];
+      });
+    }
+    (po.items || []).forEach(it => {
+      const key = [po.po_no, String(it.part||'').trim().toUpperCase(), normColor(it.color)].join('||');
+      priceMap[key] = parseFloat(String(it.price).replace(/,/g,'')) || 0;
+    });
+  });
+
+  const results = plRows.map(r => {
+    const partKey = String(r.pos||'').trim().toUpperCase();
+    const key = [r.poNo, partKey, normColor(r.color)].join('||');
+    const qty = Math.round(r.yds * 100) / 100;
+    const hasPrice = Object.prototype.hasOwnProperty.call(priceMap, key);
+    const price = hasPrice ? priceMap[key] : null;
+    const amount = hasPrice ? Math.round(qty * price * 100) / 100 : null;
+    // Fabric Info: prefer the value already on the packing list row; if the
+    // packing list didn't have it, fall back to the PO's Fabric Details
+    // table for the matching Part (B1 = Body(1), T1 = Trim(1)).
+    const fabricInfo = r.fabricInfo || fabricByPoPart[[r.poNo, partKey].join('||')] || '';
+    return {
+      poNo: r.poNo,
+      styleNo: styleMap[r.poNo] || r.styleNo,
+      part: r.pos,
+      color: r.color,
+      fabricInfo,
+      qty, price, amount,
+      matched: hasPrice
+    };
+  });
+  return { results, shipTo };
+}
+
+// ---------- workbook generation ----------
+function styleBox(cell){
+  cell.border = { top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'} };
+}
+function label(ws, addr, text, opts){
+  const c = ws.getCell(addr);
+  c.value = text;
+  c.font = Object.assign({ size:9, bold:true }, opts && opts.font);
+  c.alignment = { vertical:'middle', wrapText:true };
+}
+function value(ws, addr, val, opts){
+  const c = ws.getCell(addr);
+  c.value = val;
+  c.font = Object.assign({ size:10 }, opts && opts.font);
+  c.alignment = Object.assign({ vertical:'middle', wrapText:true }, opts && opts.alignment);
+  if (opts && opts.numFmt) c.numFmt = opts.numFmt;
+}
+
+async function buildWorkbook(results, header){
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('COMMERCIAL INVOICE');
+  ws.columns = [
+    {width:16},{width:22},{width:3},{width:18},{width:3},
+    {width:11},{width:11},{width:3},{width:9},{width:12}
+  ];
+
+  ws.mergeCells('A1:J1'); value(ws,'A1', header.shipper, {font:{bold:true,size:13}, alignment:{horizontal:'center'}});
+  ws.mergeCells('A2:J2'); value(ws,'A2', header.shipperAddr, {alignment:{horizontal:'center'}});
+  ws.mergeCells('A3:J3'); ws.getCell('A3').value='';
+  ws.mergeCells('A4:J4'); value(ws,'A4','COMMERCIAL INVOICE', {font:{bold:true,size:15}, alignment:{horizontal:'center'}});
+
+  ws.mergeCells('A6:E6'); label(ws,'A6','1. SHIPPER / EXPORTER'); styleBox(ws.getCell('A6'));
+  ws.mergeCells('F6:J6'); label(ws,'F6','8. NO. & DATE OF INVOICE'); styleBox(ws.getCell('F6'));
+  ws.mergeCells('A7:E9'); value(ws,'A7', `${header.shipper}\n${header.shipperAddr}`); styleBox(ws.getCell('A7'));
+  ws.mergeCells('F7:G7'); label(ws,'F7','NO:'); styleBox(ws.getCell('F7'));
+  ws.mergeCells('H7:J7'); value(ws,'H7', header.invoiceNo || ''); styleBox(ws.getCell('H7'));
+  ws.mergeCells('F8:G8'); label(ws,'F8','DATE:'); styleBox(ws.getCell('F8'));
+  ws.mergeCells('H8:J8'); value(ws,'H8', header.invoiceDate || ''); styleBox(ws.getCell('H8'));
+  ws.mergeCells('F9:G9'); label(ws,'F9','L/C NO:'); styleBox(ws.getCell('F9'));
+  ws.mergeCells('H9:J9'); value(ws,'H9', header.lcNo || ''); styleBox(ws.getCell('H9'));
+
+  ws.mergeCells('A10:E10'); label(ws,'A10','2. FOR ACCOUNT & RISK OF MESSRS'); styleBox(ws.getCell('A10'));
+  ws.mergeCells('F10:J10'); label(ws,'F10','PAYMENT BY'); styleBox(ws.getCell('F10'));
+  ws.mergeCells('A11:E12'); value(ws,'A11', header.payBy || ''); styleBox(ws.getCell('A11'));
+  ws.mergeCells('F11:J12'); value(ws,'F11', header.payBy || ''); styleBox(ws.getCell('F11'));
+
+  ws.mergeCells('A13:E13'); label(ws,'A13','3. CONSIGNEE'); styleBox(ws.getCell('A13'));
+  ws.mergeCells('F13:J13'); label(ws,'F13','9. NOTIFY PARTY'); styleBox(ws.getCell('F13'));
+  ws.mergeCells('A14:E17');
+  value(ws,'A14', `${header.consignee}\n${header.consigneeAddr}\nTEL: ${header.consigneeTel}`);
+  styleBox(ws.getCell('A14'));
+  ws.mergeCells('F14:J17'); value(ws,'F14', ''); styleBox(ws.getCell('F14'));
+
+  ws.mergeCells('A18:B18'); label(ws,'A18','4. PORT OF LOADING'); styleBox(ws.getCell('A18'));
+  ws.mergeCells('C18:E18'); label(ws,'C18','5. FINAL DESTINATION'); styleBox(ws.getCell('C18'));
+  ws.mergeCells('F18:J18'); label(ws,'F18',''); styleBox(ws.getCell('F18'));
+  ws.mergeCells('A19:B19'); value(ws,'A19', header.port || ''); styleBox(ws.getCell('A19'));
+  ws.mergeCells('C19:E19'); value(ws,'C19', header.dest || ''); styleBox(ws.getCell('C19'));
+  ws.mergeCells('F19:J19'); value(ws,'F19', `COUNTRY OF ORIGIN: VIETNAM`); styleBox(ws.getCell('F19'));
+
+  ws.mergeCells('A20:B20'); label(ws,'A20','6. VESSEL / VOYAGE NO.'); styleBox(ws.getCell('A20'));
+  ws.mergeCells('C20:E20'); label(ws,'C20','7. DEPARTURE DATE'); styleBox(ws.getCell('C20'));
+  ws.mergeCells('F20:J20'); label(ws,'F20','PRICE TERMS'); styleBox(ws.getCell('F20'));
+  ws.mergeCells('A21:B21'); value(ws,'A21', header.vessel || ''); styleBox(ws.getCell('A21'));
+  ws.mergeCells('C21:E21'); value(ws,'C21', header.invoiceDate || ''); styleBox(ws.getCell('C21'));
+  ws.mergeCells('F21:J21'); value(ws,'F21', header.priceTerm || ''); styleBox(ws.getCell('F21'));
+
+  ws.mergeCells('A22:B22'); label(ws,'A22','10. MARKS & NOS.'); styleBox(ws.getCell('A22'));
+  ws.mergeCells('C22:J22'); label(ws,'C22','11. DESCRIPTION OF GOODS'); styleBox(ws.getCell('C22'));
+
+  const headerRowIdx = 23;
+  const headers = ['Style No','Fabric Info.','','Color','','Shipped\nQuantity','Quantity','','Price','Amount'];
+  headers.forEach((h,i) => {
+    const c = ws.getCell(headerRowIdx, i+1);
+    c.value = h;
+    c.font = { bold:true, size:9 };
+    c.alignment = { horizontal:'center', vertical:'middle', wrapText:true };
+    styleBox(c);
+  });
+
+  const firstDataRow = headerRowIdx + 1;
+  results.forEach((r, i) => {
+    const row = firstDataRow + i;
+    ws.getCell(row,1).value = r.styleNo;
+    ws.getCell(row,2).value = r.fabricInfo || '';
+    ws.getCell(row,4).value = r.color;
+    ws.getCell(row,6).value = r.qty;
+    ws.getCell(row,7).value = r.qty;
+    ws.getCell(row,9).value = r.matched ? r.price : null;
+    ws.getCell(row,10).value = r.matched ? { formula: `ROUND(G${row}*I${row},2)` } : 'MATCH ERROR';
+    for (let c=1;c<=10;c++){ ws.getCell(row,c).font = { size:9.5, color: r.matched?undefined:{argb:'FFA83B32'} }; styleBox(ws.getCell(row,c)); }
+    ws.getCell(row,6).numFmt = '#,##0.00';
+    ws.getCell(row,7).numFmt = '#,##0.00';
+    ws.getCell(row,9).numFmt = '0.0000';
+    ws.getCell(row,10).numFmt = '#,##0.00';
+  });
+
+  const totalRow = firstDataRow + results.length;
+  ws.getCell(totalRow,1).value = 'TOTAL';
+  ws.getCell(totalRow,1).font = { bold:true };
+  ws.getCell(totalRow,6).value = { formula: `SUM(F${firstDataRow}:F${totalRow-1})` };
+  ws.getCell(totalRow,7).value = { formula: `SUM(G${firstDataRow}:G${totalRow-1})` };
+  ws.getCell(totalRow,10).value = { formula: `SUM(J${firstDataRow}:J${totalRow-1})` };
+  for (let c=1;c<=10;c++){
+    ws.getCell(totalRow,c).font = { bold:true, size:9.5 };
+    ws.getCell(totalRow,c).border = { top:{style:'double'} };
+  }
+  ws.getCell(totalRow,6).numFmt = '#,##0.00';
+  ws.getCell(totalRow,7).numFmt = '#,##0.00';
+  ws.getCell(totalRow,10).numFmt = '#,##0.00';
+
+  const sigRow = totalRow + 3;
+  ws.mergeCells(sigRow, 6, sigRow, 10);
+  const sig = ws.getCell(sigRow,6);
+  sig.value = header.shipper;
+  sig.alignment = { horizontal:'center' };
+  sig.font = { bold:true };
+
+  return wb;
+}
+
+function renderResults(results){
+  const el = document.getElementById('results');
+  let total = 0;
+  let rowsHtml = results.map(r => {
+    if (r.matched) total += r.amount;
+    return `<tr class="${r.matched?'':'mismatch'}">
+      <td>${r.poNo}</td><td>${r.styleNo}</td><td>${r.part}</td><td>${r.fabricInfo||''}</td><td>${r.color}</td>
+      <td class="num">${r.qty.toLocaleString(undefined,{minimumFractionDigits:2})}</td>
+      <td class="num">${r.matched ? r.price.toFixed(4) : '-'}</td>
+      <td class="num">${r.matched ? r.amount.toLocaleString(undefined,{minimumFractionDigits:2}) : 'MATCH ERROR'}</td>
+      <td>${r.matched ? `<span class="badge ok">${t('res.matched')}</span>` : `<span class="badge bad">${t('res.nopricebadge')}</span>`}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `
+    <table class="results">
+      <thead><tr><th>${t('res.poNo')}</th><th>${t('res.styleNo')}</th><th>${t('res.part')}</th><th>${t('res.fabric')}</th><th>${t('res.color')}</th><th>${t('res.qty')}</th><th>${t('res.price')}</th><th>${t('res.amount')}</th><th>${t('res.status')}</th></tr></thead>
+      <tbody>${rowsHtml}
+        <tr class="totalrow"><td colspan="7">${t('res.total')}</td><td>${total.toLocaleString(undefined,{minimumFractionDigits:2})}</td><td></td></tr>
+      </tbody>
+    </table>`;
+}
+
+// ---------- run ----------
+document.getElementById('btn-run').addEventListener('click', async () => {
+  clearLog();
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('btn-download').disabled = true;
+
+  if (!inPl.files[0]) { log(t('log.needPl'), 'err'); return; }
+  if (poFiles.length === 0) { log(t('log.needPo'), 'err'); return; }
+
+  const runBtn = document.getElementById('btn-run');
+  runBtn.disabled = true;
+  try {
+    log(t('log.readingPl'));
+    state.plRows = await parsePackingList(inPl.files[0]);
+    log(t('log.plDone', state.plRows.length), 'ok');
+
+    state.poData = [];
+    for (const f of poFiles){
+      log(t('log.readingPo', f.name));
+      const parsed = await extractPO(f);
+      state.poData.push(parsed);
+      log(t('log.poDone', parsed.po_no, parsed.style_no, (parsed.items||[]).length), 'ok');
+    }
+
+    const { results, shipTo } = matchAndCompute(state.plRows, state.poData);
+    state.results = results;
+
+    // autofill consignee fields (and derived final destination) from first PO that has ship-to info
+    const firstShip = Object.values(shipTo)[0];
+    if (firstShip){
+      if (!document.getElementById('f-consignee').value) document.getElementById('f-consignee').value = firstShip.ship_to_name || '';
+      if (!document.getElementById('f-consignee-addr').value) document.getElementById('f-consignee-addr').value = firstShip.ship_to_address || '';
+      if (!document.getElementById('f-consignee-tel').value) document.getElementById('f-consignee-tel').value = firstShip.ship_to_tel || '';
+      document.getElementById('f-dest').value = firstShip.final_destination || document.getElementById('f-dest').value;
+    }
+
+    const mismatches = results.filter(r => !r.matched);
+    if (mismatches.length){
+      log(t('log.mismatch', mismatches.length), 'err');
+    } else {
+      log(t('log.allMatched'), 'ok');
+    }
+    renderResults(results);
+    document.getElementById('btn-download').disabled = mismatches.length === results.length;
+  } catch(e){
+    console.error(e);
+    log(t('log.error', e.message), 'err');
+  } finally {
+    runBtn.disabled = false;
+  }
+});
+
+document.getElementById('btn-download').addEventListener('click', async () => {
+  if (!state.results) return;
+  const header = {
+    shipper: document.getElementById('f-shipper').value,
+    shipperAddr: document.getElementById('f-shipper-addr').value,
+    invoiceNo: document.getElementById('f-invno').value,
+    invoiceDate: document.getElementById('f-invdate').value,
+    lcNo: document.getElementById('f-lcno').value,
+    payBy: document.getElementById('f-payby').value,
+    consignee: document.getElementById('f-consignee').value,
+    consigneeAddr: document.getElementById('f-consignee-addr').value,
+    consigneeTel: document.getElementById('f-consignee-tel').value,
+    port: document.getElementById('f-port').value,
+    dest: document.getElementById('f-dest').value,
+    vessel: document.getElementById('f-vessel').value,
+    priceTerm: document.getElementById('f-priceterm').value,
+  };
+  const wb = await buildWorkbook(state.results, header);
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `INVOICE_${header.invoiceNo || 'draft'}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+applyLang('ko');
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+</script>
+</body>
+</html>
